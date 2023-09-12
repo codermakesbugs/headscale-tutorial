@@ -1,0 +1,134 @@
+# Config specification: https://coreos.github.io/butane/config-fcos-v1_4/
+# Guidelines: https://docs.fedoraproject.org/en-US/fedora-coreos/producing-ign/
+variant: "fcos"
+version: "1.4.0"
+# We could define additional authorized keys for administrators.
+# passwd:
+#   users:
+#     - name: "core"
+#       ssh_authorized_keys:
+#         # Each string is a public ssh key.
+#         - "{{ insert admin public key here }}"
+systemd:
+  units:
+    # Installing essential tools as a layered package with rpm-ostree
+    # Reference: https://docs.fedoraproject.org/en-US/fedora-coreos/os-extensions/
+    - name: "rpm-ostree-install-essential-tools.service"
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Layer essential tools with rpm-ostree
+        Wants=network-online.target
+        After=network-online.target
+        Before=zincati.service
+        ConditionPathExists=!/var/lib/%N.stamp
+
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        ExecStart=/usr/bin/rpm-ostree install --apply-live --allow-inactive curl jq htop tree unzip vim mosh podman-compose
+        ExecStart=/bin/touch /var/lib/%N.stamp
+
+        [Install]
+        WantedBy=multi-user.target
+storage:
+  disks:
+    # The device name is specified by guideline https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/device_naming.html
+    # We are going to use the second EBS volume for storing apps data.
+    - device: "/dev/nvme1n1"
+      wipe_table: true
+      partitions:
+        - number: 1
+          label: "apps"
+  filesystems:
+    # According to https://docs.fedoraproject.org/en-US/fedora-coreos/storage/#_mounted_filesystems
+    # We should store state in /var, we will mount apps partition to /var/apps
+    - path: "/var/apps"
+      device: "/dev/disk/by-partlabel/apps"
+      # The new volume need to be formatted.
+      format: "ext4"
+      # Create a systemd unit to mount the volume automatically.
+      with_mount_unit: true
+  directories:
+    # Install amazon-ecr-credential-helper
+    # We need to create each directory to configure the correct owner and permission.
+    - path: "/home/core/.local"
+      mode: 0755
+      user:
+        name: "core"
+      group:
+        name: "core"
+    - path: "/home/core/.local/bin"
+      mode: 0755
+      user:
+        name: "core"
+      group:
+        name: "core"
+    - path: "/home/core/.docker"
+      mode: 0755
+      user:
+        name: "core"
+      group:
+        name: "core"
+  files:
+    # Set default editor
+    - path: "/etc/profile.d/zz-default-editor.sh"
+      overwrite: true
+      contents:
+        inline: "export EDITOR=vim"
+    # Custom setting for vim
+    - path: "/home/core/.vimrc"
+      mode: 0644
+      user:
+        name: "core"
+      group:
+        name: "core"
+      contents:
+        inline: |
+          syntax on
+          set number
+          set tabstop=2 softtabstop=0 expandtab shiftwidth=2 smarttab
+          set autoindent
+    # Set hostname
+    - path: "/etc/hostname"
+      mode: 0644
+      contents:
+        inline: "headscale.aws.mesoneer.io"
+    # Install amazon-ecr-credential-helper, based on https://docs.fedoraproject.org/en-US/fedora-coreos/tutorial-user-systemd-unit-on-boot/
+    # Download docker-credential-ecr-login
+    - path: "/home/core/.local/bin/docker-credential-ecr-login"
+      mode: 0755
+      contents:
+        source: "https://amazon-ecr-credential-helper-releases.s3.us-east-2.amazonaws.com/0.6.0/linux-amd64/docker-credential-ecr-login"
+        verification:
+          hash: "sha256-af805202cb5d627dde2e6d4be1f519b195fd5a3a35ddc88d5010b4a4e5a98dd8"
+      user:
+        name: "core"
+      group:
+        name: "core"
+    # Podman will pick up this configuration to authenticate against ECR using docker-credential-ecr-login
+    - path: "/home/core/.docker/config.json"
+      mode: 0644
+      contents:
+        inline: |
+          {
+            "credHelpers": {
+              "031813119665.dkr.ecr.ap-southeast-1.amazonaws.com": "ecr-login"
+            }
+          }
+    # Set up lingering for the systemd user level instance so that it gets started directly on boot and stays running,
+    # otherwise the user's systemd unit will only start when user login and will fail when user logout. We will utilize
+    # systemd unit to run Compose.
+    - path: "/var/lib/systemd/linger/core"
+      mode: 0644
+    # Set update schedule at 18:00 UTC (at the midnight of VN time) Saturday and Sunday.
+    # Reference: https://docs.fedoraproject.org/en-US/fedora-coreos/auto-updates/
+    - path: /etc/zincati/config.d/55-updates-strategy.toml
+      contents:
+        inline: |
+          [updates]
+          strategy = "periodic"
+          [[updates.periodic.window]]
+          days = [ "Sat", "Sun" ]
+          start_time = "18:00"
+          length_minutes = 120

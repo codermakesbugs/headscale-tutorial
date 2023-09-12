@@ -1,0 +1,17 @@
+version: "3.9"
+services:
+  headscale:
+    image: "registry.hub.docker.com/headscale/headscale:0.22.3"
+    # This flag is passed to Docker/Podman run --init commands and the containers entrypoint will be overridden with
+    # tini (Docker) or catatonit (Podman).
+    # Why do we need it? https://github.com/krallin/tini/issues/8
+    init: true
+    command: "headscale serve"
+    ports:
+      - "443:443"
+      - "3478:3478/udp"
+    volumes:
+      # Note for podman user:
+      # - The mounted directory should have 775 permission, otherwise container could not write to the directory.
+      # - The `Z` option is needed to let SELinux allow disk access to that directory, more detail: https://www.redhat.com/sysadmin/container-permission-denied-errors
+      - "./headscale_data:/etc/headscale:Z"

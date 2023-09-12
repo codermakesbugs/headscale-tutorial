@@ -1,0 +1,55 @@
+# This configuration referred form https://github.com/juanfont/headscale/blob/5706f84cb0645af2aad1087a10b5b41e14f508e6/config-example.yaml
+# Please check that file for more details, the content bellow only has configuration without details.
+
+server_url: "https://example.com"
+
+listen_addr: "0.0.0.0:443"
+
+private_key_path: "/etc/headscale/private.key"
+
+noise:
+  private_key_path: "/etc/headscale/noise_private.key"
+
+ip_prefixes:
+  - "100.64.0.0/10"
+
+derp:
+  server:
+    enabled: true
+    region_id: 999
+    region_code: "m-sin"
+    region_name: "example, Singapore"
+    stun_listen_addr: "0.0.0.0:3478"
+  paths:
+    - "/etc/headscale/derp.yaml"
+
+disable_check_updates: false
+
+db_type: "sqlite3"
+db_path: "/etc/headscale/db.sqlite"
+
+acme_url: "https://acme-v02.api.letsencrypt.org/directory"
+acme_email: ""
+tls_letsencrypt_hostname: "example.com"
+tls_letsencrypt_cache_dir: "/etc/headscale/letsencrypt"
+tls_letsencrypt_challenge_type: "TLS-ALPN-01"
+tls_letsencrypt_listen: ":https"
+
+dns_config:
+  override_local_dns: false
+  nameservers:
+    - "1.1.1.1"
+  domains: []
+  magic_dns: false
+  base_domain: "example.io"
+
+oidc:
+  only_start_if_oidc_is_available: true
+  issuer: ""
+  client_id: ""
+  client_secret_path: "/etc/headscale/oidc_client_secret"
+  #client_secret: ""
+  scope: ["openid", "profile", "email"]
+  allowed_domains:
+    - "example.io"
+  strip_email_domain: false
